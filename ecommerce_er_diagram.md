@@ -2,22 +2,22 @@
 
 ```mermaid
 erDiagram
-    %% USERS & ACCESS CONTROL (Updated for IAM/SSO)
+    %% ==========================================
+    %% 1. USERS, IAM & ACCESS CONTROL
+    %% ==========================================
     users {
         bigint id PK
         varchar name
         varchar email UK
-        varchar password "nullable for pure SSO users"
+        varchar password "nullable for SSO"
         timestamp created_at
         timestamp updated_at
     }
     sso_identities {
         bigint id PK
         bigint user_id FK
-        varchar provider_name "e.g., google, apple, facebook"
-        varchar provider_id "unique ID from provider"
-        text access_token
-        text refresh_token
+        varchar provider_name "google, apple"
+        varchar provider_id UK
         timestamp created_at
     }
     user_addresses {
@@ -30,16 +30,16 @@ erDiagram
         boolean is_default
     }
 
-    %% ADVANCED ROLE PERMISSIONS (Spatie RBAC)
+    %% ==========================================
+    %% 2. ADVANCED RBAC (Spatie Permission)
+    %% ==========================================
     roles {
         bigint id PK
-        varchar name UK "e.g., Super Admin, Shop Owner, Staff"
-        varchar guard_name "web, api"
+        varchar name UK "Super Admin, Vendor, Driver"
     }
     permissions {
         bigint id PK
-        varchar name UK "e.g., edit_products, view_revenue"
-        varchar guard_name "web, api"
+        varchar name UK
     }
     role_has_permissions {
         bigint role_id FK
@@ -47,29 +47,30 @@ erDiagram
     }
     model_has_roles {
         bigint role_id FK
-        varchar model_type "e.g., App\\Models\\User"
         bigint model_id FK "user_id"
     }
     model_has_permissions {
         bigint permission_id FK
-        varchar model_type "e.g., App\\Models\\User"
         bigint model_id FK "user_id"
     }
 
-    %% SECURITY & AUDITING
+    %% ==========================================
+    %% 3. SECURITY & AUDIT LOGS
+    %% ==========================================
     audit_logs {
         bigint id PK
         bigint user_id FK "nullable"
         varchar event "created, updated, deleted"
-        varchar auditable_type "Model Namespace"
+        varchar auditable_type
         bigint auditable_id
         jsonb old_values
         jsonb new_values
-        varchar ip_address
         timestamp created_at
     }
 
-    %% MULTI-VENDOR MARKETPLACE
+    %% ==========================================
+    %% 4. MULTI-VENDOR MARKETPLACE
+    %% ==========================================
     shops {
         bigint id PK
         bigint vendor_id FK "users.id"
@@ -81,7 +82,9 @@ erDiagram
         timestamp created_at
     }
 
-    %% PRODUCT CATALOG
+    %% ==========================================
+    %% 5. PRODUCT CATALOG
+    %% ==========================================
     categories {
         bigint id PK
         bigint parent_id FK "nullable"
@@ -97,7 +100,7 @@ erDiagram
         text description
         decimal base_price
         enum status
-        timestamp deleted_at "soft delete"
+        timestamp deleted_at
     }
     product_variants {
         bigint id PK
@@ -115,7 +118,9 @@ erDiagram
         integer sort_order
     }
 
-    %% CUSTOMER EXPERIENCE
+    %% ==========================================
+    %% 6. CUSTOMER EXPERIENCE
+    %% ==========================================
     wishlists {
         bigint id PK
         bigint user_id FK
@@ -132,7 +137,9 @@ erDiagram
         timestamp created_at
     }
 
-    %% SHOPPING CART
+    %% ==========================================
+    %% 7. SHOPPING CART
+    %% ==========================================
     carts {
         bigint id PK
         bigint user_id FK "nullable"
@@ -145,7 +152,9 @@ erDiagram
         integer quantity
     }
 
-    %% MARKETING, LOGISTICS & TAXES
+    %% ==========================================
+    %% 8. MARKETING & TAXES
+    %% ==========================================
     coupons {
         bigint id PK
         varchar code UK
@@ -157,8 +166,7 @@ erDiagram
     shipping_methods {
         bigint id PK
         varchar name
-        decimal cost
-        varchar estimated_days
+        decimal base_cost
     }
     tax_rates {
         bigint id PK
@@ -167,7 +175,9 @@ erDiagram
         decimal rate_percentage
     }
 
-    %% CHECKOUT & PAYMENTS (Unified Single Payment)
+    %% ==========================================
+    %% 9. CHECKOUT & PAYMENTS (Unified)
+    %% ==========================================
     checkouts {
         bigint id PK
         bigint user_id FK
@@ -180,7 +190,7 @@ erDiagram
         bigint id PK
         bigint user_id FK
         varchar provider "stripe, paypal"
-        varchar provider_token "secure token"
+        varchar provider_token
         varchar card_brand
         varchar last_four
         boolean is_default
@@ -193,22 +203,20 @@ erDiagram
         varchar transaction_id
         enum status "pending, completed, failed"
         decimal amount
-        timestamp created_at
     }
 
-    %% SPLIT ORDERS & FULFILLMENT (Per Shop)
+    %% ==========================================
+    %% 10. SPLIT ORDERS & POST-PURCHASE
+    %% ==========================================
     orders {
         bigint id PK
         bigint checkout_id FK
         bigint shop_id FK
         bigint shipping_method_id FK
         varchar order_number UK
-        enum status "pending, shipped, delivered"
-        decimal shop_subtotal
-        decimal shop_tax
-        decimal shop_shipping_cost
+        enum status "pending, ready, shipped, delivered"
+        enum fulfillment_type "in_house, third_party"
         decimal shop_total
-        decimal platform_fee_deducted
         jsonb shipping_address "snapshot"
         timestamp created_at
     }
@@ -235,7 +243,30 @@ erDiagram
         timestamp created_at
     }
 
-    %% RELATIONSHIPS
+    %% ==========================================
+    %% 11. HYBRID LOGISTICS (In-House vs Express)
+    %% ==========================================
+    deliveries {
+        bigint id PK
+        bigint order_id FK "In-House Route"
+        bigint driver_id FK "users.id"
+        enum status "assigned, picked_up, out_for_delivery, delivered"
+        varchar proof_of_delivery_url "S3 image"
+        timestamp delivered_at
+    }
+    shipments {
+        bigint id PK
+        bigint order_id FK "Third-Party Route"
+        varchar courier_name "e.g., J&T Express"
+        varchar tracking_number
+        varchar label_url "PDF URL"
+        enum status "label_created, in_transit, delivered"
+        timestamp delivered_at
+    }
+
+    %% ==========================================
+    %% RELATIONSHIPS DEFINITION
+    %% ==========================================
     users ||--o{ sso_identities : "logs_in_via"
     users ||--o{ user_addresses : "has"
     users ||--o| shops : "manages"
@@ -245,8 +276,8 @@ erDiagram
     users ||--o{ reviews : "writes"
     users ||--o| carts : "owns"
     users ||--o{ checkouts : "initiates"
+    users ||--o{ deliveries : "drives_for"
     
-    %% RBAC Relationships
     roles ||--o{ role_has_permissions : "grants"
     permissions ||--o{ role_has_permissions : "assigned_to"
     roles ||--o{ model_has_roles : "assigned_to"
@@ -275,6 +306,8 @@ erDiagram
     orders ||--o{ order_items : "contains"
     orders ||--o| returns : "has_returns"
     orders ||--o| order_coupons : "uses"
+    orders ||--o| deliveries : "dispatched_internally"
+    orders ||--o| shipments : "dispatched_externally"
     
     product_variants ||--o{ order_items : "fulfilled_as"
     shipping_methods ||--o{ orders : "used_by"
